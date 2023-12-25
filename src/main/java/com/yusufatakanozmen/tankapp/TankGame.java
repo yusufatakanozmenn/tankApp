@@ -11,6 +11,14 @@ import javafx.scene.paint.Color;
 import javafx.scene.shape.Rectangle;
 import javafx.stage.Stage;
 import javafx.util.Duration;
+import javafx.scene.Node;
+import javafx.scene.text.Text;
+import javafx.scene.text.Font;
+import javafx.scene.text.FontWeight;
+import javafx.animation.Animation;
+import java.util.List;
+import java.util.ArrayList;
+import java.util.Arrays;
 
 
 import java.util.Random;
@@ -28,6 +36,9 @@ public class TankGame extends Application {
     private boolean isPlayerTankHit = false;
     private boolean[] isEnemyTankHit = new boolean[3];
     private boolean isTankFacingRight = true;
+    private Text gameOverText;
+    private Timeline gameLoop;
+
 
     public static void main(String[] args) {
         launch(args);
@@ -44,8 +55,30 @@ public class TankGame extends Application {
         initializeTanks();
         initializeKeyEvents(scene);
         startGameLoop();
+        initializeGameOverText();
+
+
+    }
+    private void initializeGameOverText() {
+        gameOverText = new Text("Game Over");
+        gameOverText.setFont(Font.font("Arial", FontWeight.BOLD, 48));
+        gameOverText.setFill(Color.RED);
+        gameOverText.setX(WIDTH / 2 - gameOverText.getLayoutBounds().getWidth() / 2);
+        gameOverText.setY(HEIGHT / 2);
+        gameOverText.setVisible(false);
+        root.getChildren().add(gameOverText);
     }
 
+
+    private void gameOver() {
+        gameOverText.setVisible(true);
+        gameLoop.stop();
+        // Remove all enemy tanks
+
+        for (Rectangle enemyTank : enemyTanks) {
+            root.getChildren().remove(enemyTank);
+        }
+    }
     private void initializeTanks() {
         playerTank = createTank(Color.BLUE, WIDTH / 2, HEIGHT - TANK_SIZE - 10);
         enemyTanks = new Rectangle[3];
@@ -104,14 +137,10 @@ public class TankGame extends Application {
     }
 
     private void fireBullet(Rectangle tank, boolean isPlayerTank) {
-        System.out.println("Firing bullet from " + (isPlayerTank ? "player tank" : "enemy tank"));
-
-        Rectangle bullet = new Rectangle(BULLET_SIZE, BULLET_SIZE);
-        bullet.setFill(Color.BLACK);
+        Rectangle bullet = createBullet(isPlayerTank);
         bullet.setTranslateX(tank.getTranslateX() + TANK_SIZE / 2 - BULLET_SIZE / 2);
         bullet.setTranslateY(tank.getTranslateY() + TANK_SIZE / 2 - BULLET_SIZE / 2);
         bullets.getChildren().add(bullet);
-
         double angle;
 
         if (isPlayerTank) {
@@ -147,23 +176,22 @@ public class TankGame extends Application {
         bulletMovement.setCycleCount(Timeline.INDEFINITE);
         bulletMovement.play();
     }
+    private Rectangle createBullet(boolean isPlayerBullet) {
+        Rectangle bullet = new Rectangle(BULLET_SIZE, BULLET_SIZE);
+        bullet.setFill(Color.BLACK);
+        bullet.getProperties().put("isPlayerBullet", isPlayerBullet);
+        return bullet;
+    }
+
     private boolean intersects(Rectangle bullet, Rectangle tank) {
         Bounds bulletBounds = bullet.getBoundsInParent();
         Bounds tankBounds = tank.getBoundsInParent();
 
-        double padding = 5.0; // Belirli bir boşluk bırakabilirsiniz
-
-        boolean isIntersecting = bulletBounds.intersects(tankBounds.getMinX() + padding, tankBounds.getMinY() + padding,
-                tankBounds.getWidth() - 2 * padding, tankBounds.getHeight() - 2 * padding) &&
+        boolean isIntersecting = bulletBounds.intersects(tankBounds) &&
                 bulletBounds.getWidth() > 0 && bulletBounds.getHeight() > 0;
-
-        if (isIntersecting) {
-            System.out.println("Bullet intersects with tank!");
-        }
 
         return isIntersecting;
     }
-
 
     private void stopEnemyTankFire(int tankIndex) {
         if (enemyBulletTimelines[tankIndex] != null) {
@@ -174,14 +202,25 @@ public class TankGame extends Application {
     private Timeline[] enemyBulletTimelines = new Timeline[3];
 
 
+
     private void startGameLoop() {
-        Timeline gameLoop = new Timeline(new KeyFrame(Duration.millis(16), event -> {
+        gameLoop = new Timeline(new KeyFrame(Duration.millis(16), event -> {
             moveEnemyTanks();
             checkCollisions();
+            fireEnemyBullets();
         }));
         gameLoop.setCycleCount(Timeline.INDEFINITE);
         gameLoop.play();
     }
+
+    private void fireEnemyBullets() {
+    for (int i = 0; i < enemyTanks.length; i++) {
+        Rectangle enemyTank = enemyTanks[i];
+        if (!isEnemyTankHit[i] && Math.random() < 0.0001) { // Decrease this value for less frequent firing
+            fireBullet(enemyTank, false);
+        }
+    }
+}
 
     private void moveEnemyTanks() {
         for (int i = 0; i < enemyTanks.length; i++) {
@@ -197,37 +236,71 @@ public class TankGame extends Application {
 
             moveTank(enemyTank, deltaX, deltaY);
 
-            if (!isEnemyTankHit[i] && Math.random() < 0.02) {
+            if (!isEnemyTankHit[i] && Math.random() < 0.01) {
                 fireBullet(enemyTank, false);
             }
         }
     }
-    private void checkCollisions() {
-        // Oyuncu tankının düşman tanklarına çarpıp çarpmadığını kontrol et
-        for (Rectangle enemyTank : enemyTanks) {
-            if (intersects(playerTank, enemyTank)) {
-                // Oyuncu tankı düşman tankına çarptı
-                // Burada gerekirse oyun durumuyla ilgili işlemler yapılabilir
-                isPlayerTankHit = true;
-                System.out.println("Player tank hit by enemy tank!");
-                // Örneğin, oyunu durdurabilir veya oyunu yeniden başlatabilirsiniz.
-            }
+    public void checkGameOver() {
+        gameOver();
+        if (gameOverText.isVisible() && gameLoop.getStatus() == Animation.Status.STOPPED) {
+            System.out.println("Game Over method is working correctly.");
+        } else {
+            System.out.println("Game Over method is not working correctly.");
         }
+    }
+private void checkCollisions() {
+    List<Node> bulletsToRemove = new ArrayList<>();
+    List<Node> tanksToRemove = new ArrayList<>();
+    List<Rectangle> tanksToAdd = new ArrayList<>();
 
-        // Düşman tanklarının ateşlediği mermilerin oyuncu tankına çarpıp çarpmadığını kontrol et
-        for (int i = 0; i < enemyBulletTimelines.length; i++) {
-            if (enemyBulletTimelines[i] != null) {
-                Rectangle enemyBullet = (Rectangle) bullets.getChildren().get(i);
-                if (intersects(enemyBullet, playerTank)) {
-                    // Düşman tankının mermisi oyuncu tankına çarptı
-                    // Burada gerekirse oyun durumuyla ilgili işlemler yapılabilir
-                    stopEnemyTankFire(i); // Düşmanın ateşini durdur
-                    isPlayerTankHit = true;
-                    System.out.println("Player tank hit by enemy bullet!");
-                    // Örneğin, oyunu durdurabilir veya oyunu yeniden başlatabilirsiniz.
+    // Check if any bullet collides with any enemy tank
+    for (Node node : bullets.getChildren()) {
+        Rectangle bullet = (Rectangle) node;
+        boolean isPlayerBullet = (boolean) bullet.getProperties().get("isPlayerBullet");
+        for (int i = 0; i < enemyTanks.length; i++) {
+            Rectangle enemyTank = enemyTanks[i];
+            if (intersects(bullet, enemyTank)) {
+                // Bullet hit enemy tank
+                if (isPlayerBullet) {
+                    // Add the enemy tank and the bullet to the removal lists
+                    tanksToRemove.add(enemyTank);
+                    bulletsToRemove.add(bullet);
+                    isEnemyTankHit[i] = true;
+
+                    // Create a new enemy tank at a random position
+                    Random rand = new Random();
+                    double x = rand.nextInt(WIDTH - TANK_SIZE);
+                    double y = rand.nextInt(HEIGHT / 2);
+                    Rectangle newEnemyTank = createTank(Color.RED, x, y);
+                    tanksToAdd.add(newEnemyTank);
+                    enemyTanks[i] = newEnemyTank;
+
+                    // Reset the hit status for the new tank
+                    isEnemyTankHit[i] = false;
                 }
             }
         }
     }
 
-}
+    // Check if any enemy bullet collides with player tank
+    for (Node node : bullets.getChildren()) {
+        Rectangle bullet = (Rectangle) node;
+        boolean isPlayerBullet = (boolean) bullet.getProperties().get("isPlayerBullet");
+        if (intersects(bullet, playerTank) && !isPlayerBullet) {
+            // Enemy bullet hit player tank
+            // Add the player tank and the bullet to the removal lists
+            tanksToRemove.add(playerTank);
+            bulletsToRemove.add(bullet);
+            isPlayerTankHit = true;
+            gameOver();
+        }
+    }
+
+    // Remove the tanks and bullets outside of the iteration
+    root.getChildren().removeAll(tanksToRemove);
+    bullets.getChildren().removeAll(bulletsToRemove);
+
+    // Add the new tanks to the root
+    root.getChildren().addAll(tanksToAdd);
+}}
