@@ -19,6 +19,11 @@ import javafx.animation.Animation;
 import java.util.List;
 import java.util.ArrayList;
 import java.util.Arrays;
+import javafx.scene.layout.Border;
+import javafx.scene.layout.BorderStroke;
+import javafx.scene.layout.BorderStrokeStyle;
+import javafx.scene.layout.CornerRadii;
+import javafx.scene.paint.Color;
 
 
 import java.util.Random;
@@ -28,6 +33,9 @@ public class TankGame extends Application {
     private static final int HEIGHT = 600;
     private static final int TANK_SIZE = 50;
     private static final int BULLET_SIZE = 5;
+    private int score = 0; // Add this line
+    private Text scoreText; // And this line
+
 
     private Pane root;
     private Rectangle playerTank;
@@ -51,29 +59,41 @@ public class TankGame extends Application {
         primaryStage.setTitle("Tank Game");
         primaryStage.setScene(scene);
         primaryStage.show();
-
         initializeTanks();
         initializeKeyEvents(scene);
         startGameLoop();
         initializeGameOverText();
-
-
+        initializeScoreText();
+        // Sınırı ayarla
+        BorderStroke borderStroke = new BorderStroke(Color.BLACK, BorderStrokeStyle.SOLID, CornerRadii.EMPTY, BorderStroke.THIN);
+        root.setBorder(new Border(borderStroke));
+        // ...
     }
+
     private void initializeGameOverText() {
         gameOverText = new Text("Game Over");
         gameOverText.setFont(Font.font("Arial", FontWeight.BOLD, 48));
-        gameOverText.setFill(Color.RED);
+        gameOverText.setFill(Color.GREY);
         gameOverText.setX(WIDTH / 2 - gameOverText.getLayoutBounds().getWidth() / 2);
         gameOverText.setY(HEIGHT / 2);
         gameOverText.setVisible(false);
         root.getChildren().add(gameOverText);
     }
+    private void initializeScoreText() {
+        scoreText = new Text("Score: " + score);
+        scoreText.setFont(Font.font("Arial", FontWeight.BOLD, 24));
+        scoreText.setFill(Color.GREEN);
+        scoreText.setX(10);
+        scoreText.setY(30);
+        root.getChildren().add(scoreText);
+    }
+
+
 
 
     private void gameOver() {
         gameOverText.setVisible(true);
         gameLoop.stop();
-        // Remove all enemy tanks
 
         for (Rectangle enemyTank : enemyTanks) {
             root.getChildren().remove(enemyTank);
@@ -100,47 +120,53 @@ public class TankGame extends Application {
         return tank;
     }
 
-    private void initializeKeyEvents(Scene scene) {
-        scene.setOnKeyPressed(event -> {
-            KeyCode code = event.getCode();
-            switch (code) {
-                case LEFT:
-                    moveTank(playerTank, -10, 0);
-                    isTankFacingRight = false;
-                    break;
-                case RIGHT:
-                    moveTank(playerTank, 10, 0);
-                    isTankFacingRight = true;
-                    break;
-                case UP:
-                    moveTank(playerTank, 0, -10);
-                    break;
-                case DOWN:
-                    moveTank(playerTank, 0, 10);
-                    break;
-                case SPACE:
-                    fireBullet(playerTank, true);
-                    break;
-            }
-        });
-    }
+   private void initializeKeyEvents(Scene scene) {
+    scene.setOnKeyPressed(event -> {
+        KeyCode code = event.getCode();
+        double speed = 20.0;
+        switch (code) {
+            case LEFT:
+                moveTank(playerTank, -speed, 0);
+                isTankFacingRight = false;
+                break;
+            case RIGHT:
+                moveTank(playerTank, speed, 0);
+                isTankFacingRight = true;
+                break;
+            case UP:
+                moveTank(playerTank, 0, -speed);
+                break;
+            case DOWN:
+                moveTank(playerTank, 0, speed);
+                break;
+            case SPACE:
+                fireBullet(playerTank, true);
+                break;
+        }
+    });
+}
 
     private void moveTank(Rectangle tank, double deltaX, double deltaY) {
         double newX = tank.getTranslateX() + deltaX;
         double newY = tank.getTranslateY() + deltaY;
-        tank.setTranslateX(interpolate(tank.getTranslateX(), newX, 0.5));
-        tank.setTranslateY(interpolate(tank.getTranslateY(), newY, 0.5));
+        // Yeni konumun saha sınırları içinde olup olmadığını kontrol et
+        if (newX >= 0 && newX <= WIDTH - TANK_SIZE && newY >= 0 && newY <= HEIGHT - TANK_SIZE) {
+            tank.setTranslateX(interpolate(tank.getTranslateX(), newX, 0.5));
+            tank.setTranslateY(interpolate(tank.getTranslateY(), newY, 0.5));
+        }
     }
-
+    // İki değer arasında interpolasyon yapar
     private double interpolate(double oldValue, double targetValue, double alpha) {
         return oldValue + alpha * (targetValue - oldValue);
     }
 
+    // Mermi ateşler
     private void fireBullet(Rectangle tank, boolean isPlayerTank) {
         Rectangle bullet = createBullet(isPlayerTank);
         bullet.setTranslateX(tank.getTranslateX() + TANK_SIZE / 2 - BULLET_SIZE / 2);
         bullet.setTranslateY(tank.getTranslateY() + TANK_SIZE / 2 - BULLET_SIZE / 2);
         bullets.getChildren().add(bullet);
+        // Mermi hareket yönünü belirle
         double angle;
 
         if (isPlayerTank) {
@@ -160,7 +186,7 @@ public class TankGame extends Application {
 
         double deltaX = speed * Math.cos(angle);
         double deltaY = speed * Math.sin(angle);
-
+        // Mermi hareketini başlat
         Timeline bulletMovement = new Timeline(new KeyFrame(Duration.millis(16), e -> {
             bullet.setTranslateX(bullet.getTranslateX() + deltaX);
             bullet.setTranslateY(bullet.getTranslateY() + deltaY);
@@ -176,6 +202,8 @@ public class TankGame extends Application {
         bulletMovement.setCycleCount(Timeline.INDEFINITE);
         bulletMovement.play();
     }
+
+    // Mermi oluşturur
     private Rectangle createBullet(boolean isPlayerBullet) {
         Rectangle bullet = new Rectangle(BULLET_SIZE, BULLET_SIZE);
         bullet.setFill(Color.BLACK);
@@ -183,6 +211,7 @@ public class TankGame extends Application {
         return bullet;
     }
 
+    // İki dikdörtgenin çakışıp çakışmadığını kontrol eder
     private boolean intersects(Rectangle bullet, Rectangle tank) {
         Bounds bulletBounds = bullet.getBoundsInParent();
         Bounds tankBounds = tank.getBoundsInParent();
@@ -193,16 +222,18 @@ public class TankGame extends Application {
         return isIntersecting;
     }
 
+    // Düşman tankının ateş etmesini durdurur
     private void stopEnemyTankFire(int tankIndex) {
         if (enemyBulletTimelines[tankIndex] != null) {
             enemyBulletTimelines[tankIndex].stop();
         }
     }
 
+    // Düşman tanklarının mermi hareketlerini kontrol eden zaman çizelgeleri
     private Timeline[] enemyBulletTimelines = new Timeline[3];
 
 
-
+    // Oyun döngüsünü başlatır
     private void startGameLoop() {
         gameLoop = new Timeline(new KeyFrame(Duration.millis(16), event -> {
             moveEnemyTanks();
@@ -212,7 +243,7 @@ public class TankGame extends Application {
         gameLoop.setCycleCount(Timeline.INDEFINITE);
         gameLoop.play();
     }
-
+    //düşman ateş okntrol
     private void fireEnemyBullets() {
     for (int i = 0; i < enemyTanks.length; i++) {
         Rectangle enemyTank = enemyTanks[i];
@@ -221,7 +252,7 @@ public class TankGame extends Application {
         }
     }
 }
-
+    // Düşman tanklarını hareket ettirir
     private void moveEnemyTanks() {
         for (int i = 0; i < enemyTanks.length; i++) {
             Rectangle enemyTank = enemyTanks[i];
@@ -249,10 +280,12 @@ public class TankGame extends Application {
             System.out.println("Game Over method is not working correctly.");
         }
     }
+    //çarpışma kontrolü
 private void checkCollisions() {
     List<Node> bulletsToRemove = new ArrayList<>();
     List<Node> tanksToRemove = new ArrayList<>();
     List<Rectangle> tanksToAdd = new ArrayList<>();
+
 
     // Check if any bullet collides with any enemy tank
     for (Node node : bullets.getChildren()) {
@@ -278,10 +311,15 @@ private void checkCollisions() {
 
                     // Reset the hit status for the new tank
                     isEnemyTankHit[i] = false;
+                    score++;
+                    scoreText.setText("Score: " + score);
                 }
             }
         }
     }
+
+
+
 
     // Check if any enemy bullet collides with player tank
     for (Node node : bullets.getChildren()) {
